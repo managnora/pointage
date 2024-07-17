@@ -1,0 +1,11 @@
+[Unit]
+Description=Log system shutdown time
+DefaultDependencies=no
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/alvin/log_time.sh Stop
+
+[Install]
+WantedBy=shutdown.target

@@ -1,0 +1,43 @@
+{% extends 'base.html.twig' %}
+
+{% block title %} CF: Pointage {% endblock %}
+
+{% block body %}
+    <main class="flex flex-col lg:flex-row">
+        <div class="px-12 pt-10 w-full">
+            <h1 class="text-4xl font-semibold mb-8">
+                Pointages
+            </h1>
+            <div class="space-y-5">
+                <!-- start ship item -->
+                {% for log in logs %}
+                <div class="bg-[#16202A] rounded-2xl pl-5 py-5 pr-11 flex flex-col min-[1174px]:flex-row min-[1174px]:justify-between">
+                    <div class="flex justify-center min-[1174px]:justify-start">
+                        <img class="h-10 w-10" src="{{ asset(log.statusImageFilename) }}" alt="Status: {{ log.statusString }}">
+                        <div class="ml-5">
+                            <h4 class="text-[22px] pt-1 font-semibold">
+                                <a class="hover:text-slate-200">{{ log.date }}</a>
+                            </h4>
+                        </div>
+                    </div>
+                    <div class="flex justify-center min-[1174px]:justify-start mt-2 min-[1174px]:mt-0 shrink-0">
+                        <div class="border-r border-white/20 w-[100px]">
+                            <p class="text-slate-400 text-xs">Entrée</p>
+                            <p class="text-xl">{{ log.startTime ? log.startTime|date('H:i') : '-' }}</p>
+                        </div>
+                        <div class="border-r border-white/20 w-[100px] pl-6">
+                            <p class="text-slate-400 text-xs">Sortie</p>
+                            <p class="text-xl">{{ log.endTime ? log.endTime|date('H:i') : '-' }}</p>
+                        </div>
+                        <div class="pl-8 w-[100px]">
+                            <p class="text-slate-400 text-xs">Difference</p>
+                            <p class="text-xl">{{ log.between }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                <!-- end ship item -->
+            </div>
+        </div>
+    </main>
+{% endblock %}

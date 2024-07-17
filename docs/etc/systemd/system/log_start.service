@@ -1,0 +1,11 @@
+[Unit]
+Description=Log system start time
+DefaultDependencies=no
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/alvin/log_time.sh Start
+
+[Install]
+WantedBy=multi-user.target
