@@ -9,10 +9,8 @@ class LogFileManager
 {
     // 1 heure de pause
     public const BREAK_TIME = 1;
+    public const WORK_DAY_MINUTES = 480;
 
-    /**
-     * @return array
-     */
     public function execute(): array
     {
         $logFile = '/home/alvin/logfile.txt';
@@ -29,13 +27,12 @@ class LogFileManager
             return $b->getCreatedAt() <=> $a->getCreatedAt();
         });
 
-        return $intermediateLogs;
+        $totals = $this->groupDataByMonthYear($intermediateLogs);
+
+        // Formater les totaux
+        return $this->formatTotalMinutes($totals);
     }
 
-    /**
-     * @param array $logLines
-     * @return array
-     */
     private function prepareLog(array $logLines): array
     {
         $logs = [];
@@ -62,10 +59,6 @@ class LogFileManager
         return $logs;
     }
 
-    /**
-     * @param array $logs
-     * @return array
-     */
     private function prepareGroupLogByDaily(array $logs): array
     {
         $logsByDate = [];
@@ -95,10 +88,6 @@ class LogFileManager
         return $logsByDate;
     }
 
-    /**
-     * @param array $logsByDate
-     * @return array
-     */
     private function prepare(array $logsByDate): array
     {
         setlocale(LC_TIME, 'fr_FR.utf8');
@@ -122,11 +111,6 @@ class LogFileManager
         return $result;
     }
 
-    /**
-     * @param \DateTime|null $startTime
-     * @param \DateTime|null $stopTime
-     * @return array
-     */
     private function calculateDifferenceTimeAndStatus(?\DateTime $startTime, ?\DateTime $stopTime): array
     {
         if (!$startTime || !$stopTime) {
@@ -153,5 +137,86 @@ class LogFileManager
             'differenceTime' => $differenceTime,
             'status' => $status,
         ];
+    }
+
+    private function convertToMinutes($timeString)
+    {
+        if ('-' == $timeString) {
+            return 0;
+        }
+
+        [$hours, $minutes] = sscanf($timeString, '%dh %d');
+
+        return $hours * 60 + $minutes;
+    }
+
+    private function groupDataByMonthYear(array $data): array
+    {
+        $totals = [];
+
+        foreach ($data as $entry) {
+            $monthYear = $entry->getStartTime()->format('Y-m');
+
+            if (!isset($totals[$monthYear])) {
+                $totals[$monthYear] = [
+                    'entries' => [],
+                    'totals' => 0,
+                ];
+            }
+
+            if ('-' !== $entry->getBetween()) {
+                $totalMinutes = self::convertToMinutes($entry->getBetween());
+                $totals[$monthYear]['totals'] += $totalMinutes;
+            }
+            $totals[$monthYear]['entries'][] = $entry;
+        }
+
+        return $totals;
+    }
+
+    private function formatTotalMinutes(array $totals): array
+    {
+        $result = [];
+        foreach ($totals as $monthYear => $total) {
+            $totalMinutes = $total['totals'];
+            $dayMinutes = $this->convertNbrDaysToMinutes(count($total['entries']));
+            $difference = $totalMinutes - $dayMinutes;
+            $result[] = [
+                'monthYear' => $monthYear,
+                'monthYearDetail' => $this->formatMonthYear($monthYear),
+                'total' => $this->formatDuration($totalMinutes),
+                'solde' => $this->formatDuration($difference),
+                'entries' => $total['entries'],
+            ];
+        }
+
+        return $result;
+    }
+
+    private function formatDuration($totalMinutes): string
+    {
+        // Convertir des minutes en jours, heures et minutes
+        $workDays = intdiv($totalMinutes, self::WORK_DAY_MINUTES); // Nombre de jours de travail
+        $remainingMinutes = $totalMinutes % self::WORK_DAY_MINUTES;
+        $hours = intdiv($remainingMinutes, 60);
+        $minutes = $remainingMinutes % 60;
+
+        return sprintf('%dj %dh %02dmn', $workDays, $hours, $minutes);
+    }
+
+    private function convertNbrDaysToMinutes(int $days): float|int
+    {
+        // Convertir une durée en minutes
+        return $days * self::WORK_DAY_MINUTES;
+    }
+
+    private function formatMonthYear(string $dateString): string
+    {
+        // Convertir le format YYYY-MM en mois et année
+        $date = \DateTime::createFromFormat('Y-m', $dateString);
+        if ($date) {
+            return $date->format('F Y'); // Ex: July 2024
+        }
+        return $dateString;
     }
 }
