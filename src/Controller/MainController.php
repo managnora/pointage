@@ -4,24 +4,25 @@ namespace App\Controller;
 
 use App\Service\LogFileManager;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 class MainController extends AbstractController
 {
-    /**
-     * @throws \Exception
-     */
     #[Route('/', name: 'app_homepage')]
-    public function homepage(LogFileManager $logFileManager): Response
+    public function homepage(Request $request, LogFileManager $logFileManager): Response
     {
-        // Définir la locale PHP
         setlocale(LC_TIME, 'fr_FR.utf8');
 
-        $result = $logFileManager->execute();
+        $page = $request->query->getInt('page', 1);
+        $itemsPerPage = 1; // Nombre de mois par page
 
-        return $this->render('main/homepage.html.twig', ['logs' => $result]);
+        $paginatedResult = $logFileManager->execute($page, $itemsPerPage);
+
+        return $this->render('main/homepage.html.twig', [
+            'logs' => $paginatedResult->getItems(),
+            'pagination' => $paginatedResult,
+        ]);
     }
-
-
 }

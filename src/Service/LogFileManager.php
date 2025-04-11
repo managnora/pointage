@@ -2,201 +2,233 @@
 
 namespace App\Service;
 
+use App\DTO\MonthlyLogData;
 use App\Model\Log;
 use App\Model\StatusEnum;
 
 class LogFileManager
 {
-    // 1 heure de pause
-    public const BREAK_TIME = 1;
-    public const WORK_DAY_MINUTES = 480;
+    private const BREAK_TIME = 1;
+    private const WORK_DAY_MINUTES = 480;
+    private const LOG_FILE_PATH = '/home/alvin/logfile.txt';
+    private const MONTHS_MAP = [
+        'janv' => 'Jan', 'févr' => 'Feb', 'mars' => 'Mar',
+        'avr' => 'Apr', 'mai' => 'May', 'juin' => 'Jun',
+        'juil' => 'Jul', 'août' => 'Aug', 'sept' => 'Sep',
+        'oct' => 'Oct', 'nov' => 'Nov', 'déc' => 'Dec',
+    ];
 
-    public function execute(): array
+    public function execute(int $page = 1, int $itemsPerPage = 3): PaginatedResult
     {
-        $logFile = '/home/alvin/logfile.txt';
-        $logsData = [];
-        if (file_exists($logFile)) {
-            $logLines = file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-            $logsData = $this->prepareLog($logLines);
-        }
-        $logGroupByDate = $this->prepareGroupLogByDaily($logsData);
-        $intermediateLogs = $this->prepare($logGroupByDate);
+        $processedLogs = $this->processLogs();
 
-        // Trier les logs par date
-        usort($intermediateLogs, function ($a, $b) {
-            return $b->getCreatedAt() <=> $a->getCreatedAt();
-        });
-
-        $totals = $this->groupDataByMonthYear($intermediateLogs);
-
-        // Formater les totaux
-        return $this->formatTotalMinutes($totals);
+        return $this->paginateResults($processedLogs, $page, $itemsPerPage);
     }
 
-    private function prepareLog(array $logLines): array
+    private function processLogs(): array
     {
-        $logs = [];
-        foreach ($logLines as $line) {
-            $parts = explode(' ', $line);
-            $date = $parts[1];
-            $month = str_replace('.', '', $parts[2]);
-            $year = $parts[3];
-            $time = $parts[4];
-            $action = end($parts);
-            $dateString = "$date $month $year $time";
-            $replacedString = str_replace(['janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil', 'août', 'sept', 'oct', 'nov', 'déc'],
-                ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-                $dateString);
-            $dateTime = \DateTime::createFromFormat('d M Y H:i:s', $replacedString);
-            $logs[] = [
-                'date' => "$date $month $year",
-                'time' => $dateTime->format('H:i'),
-                'action' => trim($action, '-'),
-                'timestamp' => $dateTime,
-            ];
-        }
+        $rawLogs = $this->readLogFile(self::LOG_FILE_PATH);
+        $groupedLogs = $this->prepareGroupLogByDaily($rawLogs);
+        $processedLogs = $this->processGroupedLogs($groupedLogs);
+        $monthlyTotals = $this->calculateMonthlyTotals($processedLogs);
+
+        return $this->formatResults($monthlyTotals);
+    }
+
+    private function processGroupedLogs(array $groupedLogs): array
+    {
+        $logs = $this->prepare($groupedLogs);
+
+        // Tri par date décroissante
+        usort($logs, fn ($a, $b) => $b->getCreatedAt() <=> $a->getCreatedAt());
 
         return $logs;
     }
 
+    private function calculateMonthlyTotals(array $processedLogs): array
+    {
+        return $this->groupDataByMonthYear($processedLogs);
+    }
+
+    private function formatResults(array $monthlyTotals): array
+    {
+        return $this->formatTotalMinutes($monthlyTotals);
+    }
+
+    private function paginateResults(array $results, int $page, int $itemsPerPage): PaginatedResult
+    {
+        $totalItems = count($results);
+        $offset = ($page - 1) * $itemsPerPage;
+        $paginatedItems = array_slice($results, $offset, $itemsPerPage);
+
+        return new PaginatedResult(
+            items: $paginatedItems,
+            totalItems: $totalItems,
+            currentPage: $page,
+            itemsPerPage: $itemsPerPage
+        );
+    }
+
+    private function readLogFile(string $logFile): array
+    {
+        if (!file_exists($logFile)) {
+            return [];
+        }
+
+        $logLines = file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+
+        return $this->prepareLog($logLines);
+    }
+
+    private function prepareLog(array $logLines): array
+    {
+        return array_map(function ($line) {
+            $parts = explode(' ', $line);
+            $dateTime = $this->parseDateTime($parts[1], $parts[2], $parts[3], $parts[4]);
+
+            return [
+                'date' => "{$parts[1]} {$parts[2]} {$parts[3]}",
+                'time' => $dateTime->format('H:i'),
+                'action' => trim(end($parts), '-'),
+                'timestamp' => $dateTime,
+            ];
+        }, $logLines);
+    }
+
+    private function parseDateTime(string $date, string $month, string $year, string $time): \DateTime
+    {
+        $month = str_replace('.', '', $month);
+        $dateString = "$date $month $year $time";
+        $replacedString = str_replace(
+            array_keys(self::MONTHS_MAP),
+            array_values(self::MONTHS_MAP),
+            $dateString
+        );
+
+        return \DateTime::createFromFormat('d M Y H:i:s', $replacedString);
+    }
+
     private function prepareGroupLogByDaily(array $logs): array
     {
-        $logsByDate = [];
-        foreach ($logs as $log) {
+        return array_reduce($logs, function ($logsByDate, $log) {
             $date = $log['date'];
             $action = $log['action'];
 
-            // Initialisation des tableaux si nécessaire
             if (!isset($logsByDate[$date])) {
                 $logsByDate[$date] = [];
             }
 
-            // Ajout du log en fonction de l'action
-            $actionLogs = &$logsByDate[$date]; // Référence au tableau pour éviter la répétition
+            if (isset($logsByDate[$date][$action])) {
+                $shouldUpdate = ('Start' === $action && $logsByDate[$date][$action]['timestamp'] > $log['timestamp'])
+                    || ('Stop' === $action && $logsByDate[$date][$action]['timestamp'] < $log['timestamp']);
 
-            if ($actionLogs && isset($actionLogs[$action])) {
-                $lastLog = $actionLogs[$action]; // Le dernier log enregistré
-                if (('Start' === $action && $lastLog['timestamp'] > $log['timestamp'])
-                    || ('Stop' === $action && $lastLog['timestamp'] < $log['timestamp'])) {
-                    $actionLogs[$action] = $log;
+                if ($shouldUpdate) {
+                    $logsByDate[$date][$action] = $log;
                 }
             } else {
-                $actionLogs[$action] = $log;
+                $logsByDate[$date][$action] = $log;
             }
-        }
 
-        return $logsByDate;
+            return $logsByDate;
+        }, []);
     }
 
     private function prepare(array $logsByDate): array
     {
         setlocale(LC_TIME, 'fr_FR.utf8');
-        // Calculer la différence d'heures par jour
-        $result = [];
-        foreach ($logsByDate as $date => $dayLogs) {
+
+        return array_map(function ($date, $dayLogs) {
             $startTime = $dayLogs['Start']['timestamp'] ?? null;
             $stopTime = $dayLogs['Stop']['timestamp'] ?? null;
+            $timeStatus = $this->calculateDifferenceTimeAndStatus($startTime, $stopTime);
 
-            $differenceTimeAndStatus = $this->calculateDifferenceTimeAndStatus($startTime, $stopTime);
-
-            $result[] = (new Log(
+            return (new Log(
                 strftime('%d %b %Y', $startTime->getTimestamp()),
                 $startTime,
                 $stopTime,
-                $differenceTimeAndStatus['differenceTime'],
-                $differenceTimeAndStatus['status'],
+                $timeStatus['differenceTime'],
+                $timeStatus['status']
             ))->setCreatedAt($startTime);
-        }
-
-        return $result;
+        }, array_keys($logsByDate), $logsByDate);
     }
 
     private function calculateDifferenceTimeAndStatus(?\DateTime $startTime, ?\DateTime $stopTime): array
     {
         if (!$startTime || !$stopTime) {
-            return [
-                'differenceTime' => '-',
-                'status' => $status = StatusEnum::IN_PROGRESS,
-            ];
+            return ['differenceTime' => '-', 'status' => StatusEnum::IN_PROGRESS];
         }
 
         $interval = $startTime->diff($stopTime);
-        $hours = $interval->h - self::BREAK_TIME; // Ajouter les heures des jours de différence
+        $hours = $interval->h - self::BREAK_TIME;
         $minutes = $interval->i;
-        $differenceTime = sprintf('%02dh %02d', $hours, $minutes);
-
-        if ($hours >= 8) {
-            $status = StatusEnum::COMPLETED;
-        } elseif ($hours < 6) {
-            $status = StatusEnum::ALERT;
-        } else { // $hours >= 6 && $hours < 8
-            $status = StatusEnum::WARNING;
-        }
 
         return [
-            'differenceTime' => $differenceTime,
-            'status' => $status,
+            'differenceTime' => sprintf('%02dh %02d', $hours, $minutes),
+            'status' => $this->determineStatus($hours),
         ];
     }
 
-    private function convertToMinutes($timeString)
+    private function determineStatus(int $hours): StatusEnum
     {
-        if ('-' == $timeString) {
+        if ($hours >= 8) {
+            return StatusEnum::COMPLETED;
+        }
+        if ($hours < 6) {
+            return StatusEnum::ALERT;
+        }
+
+        return StatusEnum::WARNING;
+    }
+
+    private function convertToMinutes(string $timeString): int
+    {
+        if ('-' === $timeString) {
             return 0;
         }
 
         [$hours, $minutes] = sscanf($timeString, '%dh %d');
 
-        return $hours * 60 + $minutes;
+        return ($hours * 60) + $minutes;
     }
 
     private function groupDataByMonthYear(array $data): array
     {
-        $totals = [];
-
-        foreach ($data as $entry) {
+        return array_reduce($data, function ($totals, $entry) {
             $monthYear = $entry->getStartTime()->format('Y-m');
 
             if (!isset($totals[$monthYear])) {
-                $totals[$monthYear] = [
-                    'entries' => [],
-                    'totals' => 0,
-                ];
+                $totals[$monthYear] = ['entries' => [], 'totals' => 0];
             }
 
             if ('-' !== $entry->getBetween()) {
-                $totalMinutes = self::convertToMinutes($entry->getBetween());
-                $totals[$monthYear]['totals'] += $totalMinutes;
+                $totals[$monthYear]['totals'] += $this->convertToMinutes($entry->getBetween());
             }
-            $totals[$monthYear]['entries'][] = $entry;
-        }
 
-        return $totals;
+            $totals[$monthYear]['entries'][] = $entry;
+
+            return $totals;
+        }, []);
     }
 
     private function formatTotalMinutes(array $totals): array
     {
-        $result = [];
-        foreach ($totals as $monthYear => $total) {
-            $totalMinutes = $total['totals'];
+        return array_map(function ($monthYear, $total) {
             $dayMinutes = $this->convertNbrDaysToMinutes(count($total['entries']));
-            $difference = $totalMinutes - $dayMinutes;
-            $result[] = [
+            $difference = $total['totals'] - $dayMinutes;
+
+            return MonthlyLogData::fromArray([
                 'monthYear' => $monthYear,
                 'monthYearDetail' => $this->formatMonthYear($monthYear),
-                'total' => $this->formatDuration($totalMinutes),
+                'total' => $this->formatDuration($total['totals']),
                 'solde' => $this->formatDuration($difference),
                 'entries' => $total['entries'],
-            ];
-        }
-
-        return $result;
+            ]);
+        }, array_keys($totals), $totals);
     }
 
-    private function formatDuration($totalMinutes): string
+    private function formatDuration(int $totalMinutes): string
     {
-        // Convertir des minutes en jours, heures et minutes
-        $workDays = intdiv($totalMinutes, self::WORK_DAY_MINUTES); // Nombre de jours de travail
+        $workDays = intdiv($totalMinutes, self::WORK_DAY_MINUTES);
         $remainingMinutes = $totalMinutes % self::WORK_DAY_MINUTES;
         $hours = intdiv($remainingMinutes, 60);
         $minutes = $remainingMinutes % 60;
@@ -204,19 +236,15 @@ class LogFileManager
         return sprintf('%dj %dh %02dmn', $workDays, $hours, $minutes);
     }
 
-    private function convertNbrDaysToMinutes(int $days): float|int
+    private function convertNbrDaysToMinutes(int $days): int
     {
-        // Convertir une durée en minutes
         return $days * self::WORK_DAY_MINUTES;
     }
 
     private function formatMonthYear(string $dateString): string
     {
-        // Convertir le format YYYY-MM en mois et année
         $date = \DateTime::createFromFormat('Y-m', $dateString);
-        if ($date) {
-            return $date->format('F Y'); // Ex: July 2024
-        }
-        return $dateString;
+
+        return $date ? $date->format('F Y') : $dateString;
     }
 }
