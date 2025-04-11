@@ -69,6 +69,66 @@
                 {% endfor %}
                 <!-- end ship item -->
             </div>
+            {% if pagination.totalPages > 1 %}
+                <nav class="pagination" role="navigation" aria-label="Pagination">
+                    {# Bouton Précédent #}
+                    <a href="{{ pagination.hasPreviousPage ? path('app_homepage', {page: pagination.previousPage}) : '#' }}"
+                       class="pagination-nav prev {{ not pagination.hasPreviousPage ? 'disabled' : '' }}"
+                            {{ not pagination.hasPreviousPage ? 'aria-disabled="true"' : '' }}>
+                        <span class="sr-only">Précédent</span>
+                        <svg class="h-1 w-1 rotate-90" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+                        </svg>
+                    </a>
+
+                    {# Première page #}
+                    {% if pagination.currentPage > 3 %}
+                        <a href="{{ path('app_homepage', {page: 1}) }}"
+                           class="pagination-item">
+                            1
+                        </a>
+                        {% if pagination.currentPage > 4 %}
+                            <span class="pagination-dots">...</span>
+                        {% endif %}
+                    {% endif %}
+
+                    {# Pages numérotées #}
+                    {% for page in pagination.getPageRange(5) %}
+                        <a href="{{ path('app_homepage', {page: page}) }}"
+                           class="pagination-item {{ page == pagination.currentPage ? 'active' : '' }}"
+                                {{ page == pagination.currentPage ? 'aria-current="page"' : '' }}>
+                            {{ page }}
+                        </a>
+                    {% endfor %}
+
+                    {# Dernière page #}
+                    {% if pagination.currentPage < (pagination.totalPages - 2) %}
+                        {% if pagination.currentPage < (pagination.totalPages - 3) %}
+                            <span class="pagination-dots">...</span>
+                        {% endif %}
+                        <a href="{{ path('app_homepage', {page: pagination.totalPages}) }}"
+                           class="pagination-item">
+                            {{ pagination.totalPages }}
+                        </a>
+                    {% endif %}
+
+                    {# Bouton Suivant #}
+                    <a href="{{ pagination.hasNextPage ? path('app_homepage', {page: pagination.nextPage}) : '#' }}"
+                       class="pagination-nav next {{ not pagination.hasNextPage ? 'disabled' : '' }}"
+                            {{ not pagination.hasNextPage ? 'aria-disabled="true"' : '' }}>
+                        <span class="sr-only">Suivant</span>
+                        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                        </svg>
+                    </a>
+                </nav>
+
+                {# Information sur la pagination #}
+                <div class="text-center text-sm text-gray-400 mt-4">
+                    Affichage de la page {{ pagination.currentPage }} sur {{ pagination.totalPages }}
+                    ({{ pagination.totalItems }} élément{{ pagination.totalItems > 1 ? 's' : '' }} au total)
+                </div>
+            {% endif %}
         </div>
     </main>
 {% endblock %}
