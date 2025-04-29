@@ -137,6 +137,13 @@ update_app_env() {
         echo "APP_ENV=prod" | sudo tee -a "$ENV_FILE" > /dev/null
         log_message "APP_ENV ajouté et configuré en prod."
     fi
+
+    # Vérifie si la variable existe déjà
+    if grep -q "^LOG_FILE_PATH=" "$ENV_FILE"; then
+        sed -i "s|^LOG_FILE_PATH=.*|LOG_FILE_PATH=$LOGFILE|" "$ENV_FILE"
+    else
+        echo "LOG_FILE_PATH=$LOGFILE" >> "$ENV_FILE"
+    fi
 }
 
 configure_project() {

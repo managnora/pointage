@@ -10,13 +10,23 @@ class LogFileManager
 {
     private const BREAK_TIME = 1;
     private const WORK_DAY_MINUTES = 480;
-    private const LOG_FILE_PATH = '/home/alvin/logfile.txt';
     private const MONTHS_MAP = [
         'janv' => 'Jan', 'févr' => 'Feb', 'mars' => 'Mar',
         'avr' => 'Apr', 'mai' => 'May', 'juin' => 'Jun',
         'juil' => 'Jul', 'août' => 'Aug', 'sept' => 'Sep',
         'oct' => 'Oct', 'nov' => 'Nov', 'déc' => 'Dec',
     ];
+
+    private string $logFilePath;
+
+    /**
+     * @param string $logFilePath
+     */
+    public function __construct(string $logFilePath)
+    {
+        $this->logFilePath = $logFilePath;
+    }
+
 
     public function execute(int $page = 1, int $itemsPerPage = 3): PaginatedResult
     {
@@ -27,7 +37,7 @@ class LogFileManager
 
     private function processLogs(): array
     {
-        $rawLogs = $this->readLogFile(self::LOG_FILE_PATH);
+        $rawLogs = $this->readLogFile($this->logFilePath);
         $groupedLogs = $this->prepareGroupLogByDaily($rawLogs);
         $processedLogs = $this->processGroupedLogs($groupedLogs);
         $monthlyTotals = $this->calculateMonthlyTotals($processedLogs);
