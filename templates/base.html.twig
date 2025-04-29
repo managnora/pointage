@@ -1,14 +1,15 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
     <head>
         <meta charset="UTF-8">
         <title>{% block title %}Welcome!{% endblock %}</title>
         <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22><text y=%221.2em%22 font-size=%2296%22>⚫️</text><text y=%221.3em%22 x=%220.2em%22 font-size=%2276%22 fill=%22%23fff%22>sf</text></svg>">
         {% block stylesheets %}
+            {{ encore_entry_link_tags('app') }}
         {% endblock %}
 
         {% block javascripts %}
-            {% block importmap %}{{ importmap('app') }}{% endblock %}
+            {{ encore_entry_script_tags('app') }}
         {% endblock %}
     </head>
     <body class="text-white" style="background: radial-gradient(102.21% 102.21% at 50% 28.75%, #00121C 42.62%, #013954 100%);">
@@ -16,7 +17,7 @@
             <div>
                 <header class="h-[114px] shrink-0 flex flex-col sm:flex-row items-center sm:justify-between py-4 sm:py-0 px-6 border-b border-white/20 shadow-md">
                     <a href="{{ path('app_homepage') }}">
-                        <img class="h-[42px]" src="{{ asset('images/tap.png') }}" alt="tap logo">
+                        <img class="h-[42px]" src="{{ asset('build/images/tap.png') }}" alt="tap logo">
                     </a>
                     <nav class="flex space-x-4 font-semibold">
                         <a class="hover:text-amber-400 pt-2" href="{{ path('app_homepage')}}">

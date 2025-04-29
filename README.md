@@ -1,22 +1,39 @@
-Serving Assets in dev vs prod
+# 📌 Projet Pointage
 
-In the dev environment, the URL /assets/images/duck-3c16d9220694c0e56d8648f25e6035e9.png is handled and returned by your Symfony app.
+Une application de gestion de pointage développée en PHP 8.3, Symfony, Node.js 20, et intégrée avec Apache.
 
-For the prod environment, before deploy, you should run:
+---
 
+## 🚀 Prérequis
 
-`php bin/console asset-map:compile`
+Assurez-vous que les outils suivants sont installés :
 
-This will physically copy all the files from your mapped directories to public/assets/ so that they're served directly by your web server.
-See Deployment for more details.
+- PHP 8.3 (FPM + CLI)
+- Apache 2 avec `mod_rewrite`
+- MySQL/MariaDB
+- Composer
+- Node.js (via NVM, version 20 recommandée)
+- NPM
+- Git
+- `nvm` (Node Version Manager)
 
-Debugging: Seeing All Mapped Assets
+---
 
-To see all of the mapped assets in your app, run:
+## ⚙️ Installation automatique (recommandée)
 
-`php bin/console debug:asset-map`
+1. **Cloner le projet**
 
+```bash
+git clone <votre-repo> pointage
+cd pointage
 
+```
+
+Lancer le script d'installation
+```bash
+chmod +x install.sh
+./install.sh
+```
 
 Feature
 - Créer un cron pour enregistrer le log dans la base données
