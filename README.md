@@ -31,8 +31,8 @@ cd pointage
 
 Lancer le script d'installation
 ```bash
-chmod +x install.sh
-./install.sh
+chmod +x scripts/install_project.sh
+./scripts/install_project.sh
 ```
 
 Feature

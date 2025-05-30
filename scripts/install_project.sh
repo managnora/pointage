@@ -10,6 +10,10 @@ PROJECT_URL="pointage.local"
 PROJECT_PATH="/var/www/"
 VHOST_PATH="/etc/apache2/sites-available/$PROJECT_DIR.conf"
 SYSTEMD_PATH="/etc/systemd/system"
+PHP_REQUIRED_VERSION="8.3"
+NODE_REQUIRED_VERSION="v20"
+NVM_DIR="$HOME/.nvm"
+COMPOSER_REQUIRED_MAJOR_VERSION="2"
 
 # Fonction pour loguer les messages
 log_message() {
@@ -96,9 +100,6 @@ verify_project_directory() {
         log_message "Le projet $PROJECT_DIR n'existe pas dans $PROJECT_PATH. Déplacement en cours..."
         sudo mv "$PROJECT_PATH_INIT" "$PROJECT_PATH"
     fi
-
-    sudo chown -R www-data:www-data "$PROJECT_PATH$PROJECT_DIR"
-    sudo chmod -R 775 "$PROJECT_PATH$PROJECT_DIR/var" "$PROJECT_PATH$PROJECT_DIR/public"
 }
 
 copy_env_file() {
@@ -154,19 +155,103 @@ configure_project() {
     verify_hosts_entry
 }
 
+check_command() {
+    command -v "$1" >/dev/null 2>&1 || { log_error "$1 n'est pas installé."; exit 1; }
+}
+
+check_php_version() {
+    check_command php
+    PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
+    if [ "$PHP_VERSION" != "$PHP_REQUIRED_VERSION" ]; then
+        log_message "Configuration de PHP $PHP_REQUIRED_VERSION par défaut..."
+        if [ -x "/usr/bin/php$PHP_REQUIRED_VERSION" ]; then
+            sudo update-alternatives --set php "/usr/bin/php$PHP_REQUIRED_VERSION"
+        else
+            log_error "PHP $PHP_REQUIRED_VERSION n'est pas installé."
+            exit 1
+        fi
+    else
+        log_message "✅ PHP $PHP_REQUIRED_VERSION déjà par défaut."
+    fi
+}
+
+install_nvm_if_missing() {
+    if [ ! -d "$NVM_DIR" ]; then
+        log_message "NVM non trouvé, installation en cours..."
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+
+        # Source nvm pour la session courante
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    else
+        log_message "NVM déjà installé."
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    fi
+}
+
+# ---------------------------------------------
+# Node.js Installation & Activation
+# ---------------------------------------------
+install_node_version_if_missing() {
+    if ! nvm ls "$NODE_REQUIRED_VERSION" | grep -q "v$NODE_REQUIRED_VERSION"; then
+        log_message "Node.js v$NODE_REQUIRED_VERSION non trouvé, installation via NVM..."
+        nvm install "$NODE_REQUIRED_VERSION"
+    else
+        log_message "Node.js v$NODE_REQUIRED_VERSION déjà installé."
+    fi
+
+    if [ "$(nvm current)" != "v$NODE_REQUIRED_VERSION" ]; then
+        log_message "Bascule vers Node.js v$NODE_REQUIRED_VERSION..."
+        nvm use "$NODE_REQUIRED_VERSION"
+    else
+        log_message "Node.js v$NODE_REQUIRED_VERSION est déjà actif."
+    fi
+}
+
+# ---------------------------------------------
+# Composer Installation / Upgrade
+# ---------------------------------------------
+install_or_upgrade_composer_if_needed() {
+    if ! command -v composer &> /dev/null; then
+        log_message "Composer non trouvé. Installation de Composer..."
+        php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+        php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+        php -r "unlink('composer-setup.php');"
+    fi
+
+    local current_version
+    current_version=$(composer --version | grep -oP '(\d+)\.\d+\.\d+')
+    local major_version="${current_version%%.*}"
+
+    if [ "$major_version" != "$COMPOSER_REQUIRED_MAJOR_VERSION" ]; then
+        log_message "Mise à jour de Composer vers la version $COMPOSER_REQUIRED_MAJOR_VERSION..."
+        sudo php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+        sudo php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+        sudo php -r "unlink('composer-setup.php');"
+    else
+        log_message "Composer version $current_version est conforme (v$COMPOSER_REQUIRED_MAJOR_VERSION)."
+    fi
+}
+
+
 install_project() {
     log_message "Installation du projet..."
 
-    # Forcer PHP 8.3
-    log_message "Configuration de PHP 8.3 par défaut..."
-    sudo update-alternatives --set php /usr/bin/php8.3
+    check_php_version
+    install_nvm_if_missing
+    install_node_version_if_missing
+    install_or_upgrade_composer_if_needed
 
     # Se déplacer dans le dossier projet
     PROJECT_FULL_PATH="$PROJECT_PATH$PROJECT_DIR"
+
     if [ ! -d "$PROJECT_FULL_PATH" ]; then
         log_error "Le dossier projet $PROJECT_FULL_PATH n'existe pas."
         exit 1
     fi
+
+    cd "$PROJECT_FULL_PATH" || exit
 
     # Installer les dépendances PHP
     if [ -f "composer.json" ]; then
@@ -197,79 +282,130 @@ install_project() {
     else
         log_error "Aucun fichier bin/console trouvé, saut du cache Symfony."
     fi
+
+    sudo chown -R www-data:www-data "$PROJECT_PATH$PROJECT_DIR"
+    sudo chmod -R 775 "$PROJECT_PATH$PROJECT_DIR/var" "$PROJECT_PATH$PROJECT_DIR/public"
 }
 
 create_systemd_services() {
     log_message "Création des services systemd..."
-    cat <<EOL | sudo tee "$SYSTEMD_PATH/log_start.service" > /dev/null
+
+    local start_service_path="$SYSTEMD_PATH/log_start.service"
+    local shutdown_service_path="$SYSTEMD_PATH/log_shutdown.service"
+    local log_script_path="$HOME/log_time.sh"
+
+    sudo tee "$start_service_path" > /dev/null <<EOL
 [Unit]
 Description=Log system start time
 After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=$HOME/log_time.sh Start
+ExecStart=$log_script_path Start
 
 [Install]
 WantedBy=multi-user.target
 EOL
 
-    cat <<EOL | sudo tee "$SYSTEMD_PATH/log_shutdown.service" > /dev/null
+    sudo tee "$shutdown_service_path" > /dev/null <<EOL
 [Unit]
 Description=Log system shutdown time
 Before=shutdown.target
 
 [Service]
 Type=oneshot
-ExecStart=$HOME/log_time.sh Stop
+ExecStart=$log_script_path Stop
 
 [Install]
 WantedBy=shutdown.target
 EOL
+
+    sudo systemctl daemon-reload
     sudo systemctl enable log_start.service log_shutdown.service
     sudo systemctl start log_start.service
+
+    log_message "Services systemd log_start et log_shutdown créés et activés."
 }
+
 
 deploy_log_script() {
     log_message "Création du script de log..."
-    cat <<EOL > "$HOME/log_time.sh"
+
+    local log_script="$HOME/log_time.sh"
+
+    cat > "$log_script" << 'EOL'
 #!/bin/bash
-echo "\$(date) - \$1" >> \$LOGFILE
+echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> '"$LOGFILE"'
 EOL
-    chmod +x "$HOME/log_time.sh"
+
+    chmod +x "$log_script"
+
+    log_message "Script de log créé : $log_script"
 }
+
 
 verify_apache() {
-    log_message "Vérification d'Apache..."
+    local service="apache2"
+    log_message "Vérification du service $service..."
 
-    if ! command -v apache2 &> /dev/null; then
-        log_error "Apache2 n'est pas installé ou introuvable."
-        exit 1
+    if ! command -v "$service" &> /dev/null; then
+        log_message "$service non trouvé. Installation en cours..."
+        sudo apt-get update
+        sudo apt-get install -y "$service"
+
+        # Vérifier que l'installation a réussi
+        if ! command -v "$service" &> /dev/null; then
+            log_error "Échec de l'installation de $service."
+            exit 1
+        fi
+    else
+        log_message "$service détecté."
     fi
 
-    if ! sudo systemctl is-active --quiet apache2; then
-        log_message "Apache n'est pas actif, tentative de démarrage..."
-        sudo systemctl start apache2
+    if ! systemctl is-active --quiet "$service"; then
+        log_message "Le service $service n'est pas actif, tentative de démarrage..."
+        sudo systemctl start "$service"
+        sleep 2
+        if ! systemctl is-active --quiet "$service"; then
+            log_error "Impossible de démarrer le service $service."
+            exit 1
+        fi
+    else
+        log_message "Le service $service est actif."
     fi
-
-    log_message "Apache est actif."
 }
+
 
 verify_php_fpm() {
-    log_message "Vérification de PHP-FPM..."
+    local service="php8.3-fpm"
+    log_message "Vérification du service $service..."
 
-    if ! systemctl list-units --type=service | grep -q php8.3-fpm.service; then
-        log_error "Le service PHP-FPM (php8.3-fpm) n'est pas détecté."
-        exit 1
+    if ! systemctl list-unit-files | grep -q "^${service}.service"; then
+        log_message "Service $service non détecté. Installation en cours..."
+        sudo apt-get update
+        sudo apt-get install -y "$service"
+
+        if ! systemctl list-unit-files | grep -q "^${service}.service"; then
+            log_error "Échec de l'installation du service $service."
+            exit 1
+        fi
+    else
+        log_message "Service $service détecté."
     fi
 
-    if ! sudo systemctl is-active --quiet php8.3-fpm; then
-        log_message "PHP-FPM n'est pas actif, tentative de démarrage..."
-        sudo systemctl start php8.3-fpm
+    if ! systemctl is-active --quiet "$service"; then
+        log_message "Le service $service n'est pas actif, tentative de démarrage..."
+        sudo systemctl start "$service"
+        sleep 2
+        if ! systemctl is-active --quiet "$service"; then
+            log_error "Impossible de démarrer le service $service."
+            exit 1
+        fi
+    else
+        log_message "Le service $service est actif."
     fi
-
-    log_message "PHP-FPM est actif."
 }
+
 
 # Execution
 log_message "Début de l'installation et du déploiement..."
