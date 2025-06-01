@@ -8,14 +8,8 @@ Une application de gestion de pointage développée en PHP 8.3, Symfony, Node.js
 
 Assurez-vous que les outils suivants sont installés :
 
-- PHP 8.3 (FPM + CLI)
-- Apache 2 avec `mod_rewrite`
-- MySQL/MariaDB
-- Composer
-- Node.js (via NVM, version 20 recommandée)
-- NPM
-- Git
-- `nvm` (Node Version Manager)
+- Docker version 28.0.2
+- docker compose  v2.34.0
 
 ---
 
@@ -51,6 +45,10 @@ sudo systemctl start system-log-stop.service
 Vérifier le contenu du log :
 ```bash
 cat logs/system-events.log
+```
+installation de ce projet sous docker
+```bash
+docker composer up -d
 ```
 
 Installer tous les dependances, vas sur le container node ou php
