@@ -7,6 +7,12 @@
 /public/bundles/
 /var/
 /vendor/
+supervisord.log
+supervisord.pid
+/scripts/log-system-start.sh
+/scripts/log-system-stop.sh
+/logs/
+/.idea
 ###< symfony/framework-bundle ###
 
 ###> php-cs-fixer/shim ###
