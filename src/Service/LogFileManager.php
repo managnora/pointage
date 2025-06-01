@@ -222,9 +222,19 @@ class LogFileManager
 
     private function formatTotalMinutes(array $totals): array
     {
-        return array_map(function ($monthYear, $total) {
+        $currentMonthYear = (new \DateTime())->format('Y-m');
+
+        return array_map(function ($monthYear, $total) use ($currentMonthYear) {
             $dayMinutes = $this->convertNbrDaysToMinutes(count($total['entries']));
+            $currentDayMinutes = $this->convertNbrDaysToMinutes(1);
+
+            // Calcul du solde selon si c'est le mois courant ou pas
+            $isCurrentMonth = $monthYear === $currentMonthYear;
             $difference = $total['totals'] - $dayMinutes;
+
+            if ($isCurrentMonth) {
+                $difference += $currentDayMinutes;
+            }
 
             return MonthlyLogData::fromArray([
                 'monthYear' => $monthYear,

@@ -29,10 +29,40 @@ cd pointage
 
 ```
 
-Lancer le script d'installation
+Pour installer les services, lancer le commande suivant:  
 ```bash
-chmod +x scripts/install_project.sh
-./scripts/install_project.sh
+cd scripts
+chmod +x setup-system-logging.sh uninstall-system-logging.sh
+./setup-system-logging.sh
+```
+
+Pour désinstaller les services, lancer le commande suivant:
+```bash
+cd scripts
+./uninstall-system-logging.sh
+```
+
+Pour tester manuellement les services:
+```bash
+sudo systemctl start system-log-start.service
+sudo systemctl start system-log-stop.service
+```
+
+Vérifier le contenu du log :
+```bash
+cat logs/system-events.log
+```
+
+Installer tous les dependances, vas sur le container node ou php
+```bash
+npm install
+npm run build
+composer install
+```
+
+Acceder sur navigateur et copier cette url:
+```bash
+http://localhost:8084
 ```
 
 Feature

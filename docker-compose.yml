@@ -1,0 +1,48 @@
+services:
+  php:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+    container_name: pointage_php
+    volumes:
+      - ./:/var/www
+      - ./logs/system-events.log:/var/log/system-events.log
+      - ./vendor:/var/www/vendor # Monte vendor local
+      - ./node_modules:/var/www/node_modules # Monte node_modules local
+    working_dir: /var/www
+    ports:
+      - "9000:9000"
+    depends_on:
+      - db
+
+  nginx:
+    image: nginx:alpine
+    container_name: pointage_nginx
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - "8084:80"
+    depends_on:
+      - php
+
+  node:
+    image: node:20
+    container_name: pointage_node
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+    command: ["tail", "-f", "/dev/null"]
+
+  db:
+    image: postgres:15
+    container_name: pointage_db
+    environment:
+      POSTGRES_USER: pointage_user
+      POSTGRES_PASSWORD: pointage_password
+      POSTGRES_DB: pointage_db
+    volumes:
+      - pointage-data:/var/lib/postgresql/data
+
+volumes:
+  pointage-data:
