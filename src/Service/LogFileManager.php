@@ -77,6 +77,11 @@ class LogFileManager
 
             $filledEntries = $this->fillMissingWorkingDays($entries);
 
+            // Trier par date croissante
+            usort($filledEntries, function ($a, $b) {
+                return $b->getStartTime() <=> $a->getStartTime();
+            });
+
             $totalMinutes = $this->calculateTotalMinutes($filledEntries);
             $soldeMinutes = $this->calculateSoldeMinutes(
                 monthYear: $item->getMonthYear(),
