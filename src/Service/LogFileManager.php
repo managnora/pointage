@@ -71,12 +71,75 @@ class LogFileManager
         $offset = ($page - 1) * $itemsPerPage;
         $paginatedItems = array_slice($results, $offset, $itemsPerPage);
 
+        /** @var MonthlyLogData $item */
+        foreach ($paginatedItems as $index => $item) {
+            $entries = $item->getEntries();
+
+            $filledEntries = $this->fillMissingWorkingDays($entries);
+
+            $totalMinutes = $this->calculateTotalMinutes($filledEntries);
+            $soldeMinutes = $this->calculateSoldeMinutes(
+                monthYear: $item->getMonthYear(),
+                totalMinutes: $totalMinutes,
+                entriesCount: count($filledEntries)
+            );
+
+            $paginatedItems[$index] = MonthlyLogData::fromArray([
+                'monthYear'        => $item->getMonthYear(),
+                'monthYearDetail'  => $item->getMonthYearDetail(),
+                'total'            => $this->formatDuration($totalMinutes),
+                'solde'            => $this->formatDuration($soldeMinutes),
+                'entries'          => $filledEntries,
+            ]);
+        }
+
         return new PaginatedResult(
             items: $paginatedItems,
             totalItems: $totalItems,
             currentPage: $page,
             itemsPerPage: $itemsPerPage
         );
+    }
+
+    private function calculateTotalMinutes(array $entries): int
+    {
+        $total = 0;
+
+        /** @var Log $log */
+        foreach ($entries as $log) {
+
+            // Si on a un startTime et un endTime → calcul direct
+            if ($log->getStartTime() instanceof \DateTime && $log->getEndTime() instanceof \DateTime) {
+
+                $interval = $log->getStartTime()->diff($log->getEndTime());
+                $minutes = ($interval->h * 60) + $interval->i;
+
+                $total += $minutes;
+                continue;
+            }
+
+            // Sinon fallback : parser between "07h 56"
+            if ($log->getBetween() && preg_match('/(\d+)h\s*(\d+)/', $log->getBetween(), $match)) {
+                $total += ((int)$match[1] * 60) + (int)$match[2];
+            }
+        }
+
+        return $total;
+    }
+
+    private function calculateSoldeMinutes(string $monthYear, int $totalMinutes, int $entriesCount): int
+    {
+        $currentMonth = (new \DateTime())->format('Y-m');
+
+        // minutes attendues pour ce nombre de jours
+        $expected = $this->convertNbrDaysToMinutes($entriesCount);
+
+        // mois courant → on ajoute la journée en cours
+        if ($monthYear === $currentMonth) {
+            $expected += $this->convertNbrDaysToMinutes(1);
+        }
+
+        return $totalMinutes - $expected;
     }
 
     private function readLogFile(string $logFile): array
@@ -266,5 +329,101 @@ class LogFileManager
         $date = \DateTime::createFromFormat('Y-m', $dateString);
 
         return $date ? $date->format('F Y') : $dateString;
+    }
+
+    private function getWorkingDaysOfMonth(int $year, int $month): array
+    {
+        $start = new \DateTime("$year-$month-01");
+        $end = (clone $start)->modify('last day of this month');
+
+        $today = new \DateTime();
+
+        // Si le mois/année == mois/année courant → fin = aujourd'hui
+        if ($year === (int)$today->format('Y') && $month === (int)$today->format('m')) {
+            $end = $today;
+        }
+
+        // Récupérer les jours fériés
+        $holidays = $this->getHolidays($year);
+
+        $workingDays = [];
+
+        while ($start <= $end) {
+            $weekday = (int)$start->format('N');
+            $dateStr = $start->format('Y-m-d');
+            if ($weekday < 6 && !in_array($dateStr, $holidays)) {
+                $workingDays[] = $start->format('d M Y');
+            }
+            $start->modify('+1 day');
+        }
+
+        return $workingDays;
+    }
+
+    private function fillMissingWorkingDays(array $logs): array
+    {
+        if (empty($logs)) {
+            return $logs;
+        }
+
+        $firstDate = $logs[array_key_first($logs)]->getStartTime();
+        $year = (int)$firstDate->format('Y');
+        $month = (int)$firstDate->format('m');
+
+        $workingDays = $this->getWorkingDaysOfMonth($year, $month);
+
+        $existingDates = [];
+        foreach ($logs as $log) {
+            $existingDates[$log->getStartTime()->format('d M Y')] = $log;
+        }
+
+        $completed = [];
+        foreach ($workingDays as $dateStr) {
+            if (isset($existingDates[$dateStr])) {
+                $completed[] = $existingDates[$dateStr];
+            } else {
+                $dateObj = \DateTime::createFromFormat('d M Y', $dateStr);
+
+                $completed[] = (new Log(
+                    $dateStr,
+                    $dateObj,
+                    $dateObj,
+                    '00h 00',
+                    StatusEnum::ALERT
+                ))->setCreatedAt($dateObj);
+            }
+        }
+
+        return $completed;
+    }
+
+    private function getHolidays(int $year): array
+    {
+        // Jours fériés fixes
+        $holidays = [
+            "$year-01-01", // Nouvel an
+            "$year-03-08", // Journée de la femme
+            "$year-03-29", // Jour des martyrs
+            "$year-05-01", // Travail
+            "$year-06-26", // Indépendance
+            "$year-08-15", // Assomption
+            "$year-11-01", // Toussaint
+            "$year-12-25", // Noël
+        ];
+
+        // Jours fériés variables (calcul à partir de la date de Pâques)
+        $easter = easter_date($year);
+        $easterDate = (new \DateTime("@$easter"))->setTimezone(new \DateTimeZone('Indian/Antananarivo'));
+
+        // Lundi de Pâques = Pâques + 1 jour
+        $lundiPaques = (clone $easterDate)->modify('+1 day')->format('Y-m-d');
+
+        // Lundi de Pentecôte = Pâques + 50 jours
+        $pentecote = (clone $easterDate)->modify('+50 days')->format('Y-m-d');
+
+        $holidays[] = $lundiPaques;
+        $holidays[] = $pentecote;
+
+        return $holidays;
     }
 }
