@@ -139,11 +139,6 @@ class LogFileManager
         // minutes attendues pour ce nombre de jours
         $expected = $this->convertNbrDaysToMinutes($entriesCount);
 
-        // mois courant → on ajoute la journée en cours
-        if ($monthYear === $currentMonth) {
-            $expected += $this->convertNbrDaysToMinutes(1);
-        }
-
         return $totalMinutes - $expected;
     }
 
