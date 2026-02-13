@@ -26,3 +26,7 @@ services:
     App\Service\LogFileManager:
         arguments:
             $logFilePath: '%log_file_path%'
+
+    App\Parser\LogFileParser:
+        arguments:
+            $logFilePath: '%log_file_path%'

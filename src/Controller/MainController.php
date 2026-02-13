@@ -25,4 +25,10 @@ class MainController extends AbstractController
             'pagination' => $paginatedResult,
         ]);
     }
+
+    #[Route('/calendar', name: 'app_log_calendar')]
+    public function calendar(): Response
+    {
+        return $this->render('main/calendar.html.twig');
+    }
 }

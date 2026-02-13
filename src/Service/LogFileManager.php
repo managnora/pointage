@@ -19,14 +19,10 @@ class LogFileManager
 
     private string $logFilePath;
 
-    /**
-     * @param string $logFilePath
-     */
     public function __construct(string $logFilePath)
     {
         $this->logFilePath = $logFilePath;
     }
-
 
     public function execute(int $page = 1, int $itemsPerPage = 3): PaginatedResult
     {
@@ -90,11 +86,11 @@ class LogFileManager
             );
 
             $paginatedItems[$index] = MonthlyLogData::fromArray([
-                'monthYear'        => $item->getMonthYear(),
-                'monthYearDetail'  => $item->getMonthYearDetail(),
-                'total'            => $this->formatDuration($totalMinutes),
-                'solde'            => $this->formatDuration($soldeMinutes),
-                'entries'          => $filledEntries,
+                'monthYear' => $item->getMonthYear(),
+                'monthYearDetail' => $item->getMonthYearDetail(),
+                'total' => $this->formatDuration($totalMinutes),
+                'solde' => $this->formatDuration($soldeMinutes),
+                'entries' => $filledEntries,
             ]);
         }
 
@@ -112,10 +108,8 @@ class LogFileManager
 
         /** @var Log $log */
         foreach ($entries as $log) {
-
             // Si on a un startTime et un endTime → calcul direct
             if ($log->getStartTime() instanceof \DateTime && $log->getEndTime() instanceof \DateTime) {
-
                 $interval = $log->getStartTime()->diff($log->getEndTime());
                 $minutes = ($interval->h * 60) + $interval->i;
 
@@ -125,7 +119,7 @@ class LogFileManager
 
             // Sinon fallback : parser between "07h 56"
             if ($log->getBetween() && preg_match('/(\d+)h\s*(\d+)/', $log->getBetween(), $match)) {
-                $total += ((int)$match[1] * 60) + (int)$match[2];
+                $total += ((int) $match[1] * 60) + (int) $match[2];
             }
         }
 
@@ -339,7 +333,7 @@ class LogFileManager
         $today = new \DateTime();
 
         // Si le mois/année == mois/année courant → fin = aujourd'hui
-        if ($year === (int)$today->format('Y') && $month === (int)$today->format('m')) {
+        if ($year === (int) $today->format('Y') && $month === (int) $today->format('m')) {
             $end = $today;
         }
 
@@ -349,7 +343,7 @@ class LogFileManager
         $workingDays = [];
 
         while ($start <= $end) {
-            $weekday = (int)$start->format('N');
+            $weekday = (int) $start->format('N');
             $dateStr = $start->format('Y-m-d');
             if ($weekday < 6 && !in_array($dateStr, $holidays)) {
                 $workingDays[] = $start->format('d M Y');
@@ -367,8 +361,8 @@ class LogFileManager
         }
 
         $firstDate = $logs[array_key_first($logs)]->getStartTime();
-        $year = (int)$firstDate->format('Y');
-        $month = (int)$firstDate->format('m');
+        $year = (int) $firstDate->format('Y');
+        $month = (int) $firstDate->format('m');
 
         $workingDays = $this->getWorkingDaysOfMonth($year, $month);
 
