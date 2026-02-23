@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\Config\TimeConfig;
 use App\DTO\LogDTO;
 use App\Entity\WorkLog;
 use App\Enum\StatusEnum;
@@ -42,7 +43,15 @@ class WorkLogManager
     private function updateExisting(WorkLog $log, LogDTO $dto): WorkLog
     {
         $log->setStatus($dto->status);
-        $log->setType(WorkLogType::from($dto->type));
+        if ($dto->type) {
+            $log->setType($dto->type);
+
+            $workedMinutes = match ($dto->type) {
+                WorkLogType::WORK, WorkLogType::RECOVERY => $dto->workedMinutes ?? $log->getWorkedMinutes(),
+                default => 0,
+            };
+            $log->setWorkedMinutes($workedMinutes);
+        }
 
         $this->em->flush();
 
@@ -75,6 +84,14 @@ class WorkLogManager
 
         if ($dto->type) {
             $log->setType($dto->type);
+
+            $workedMinutes = match ($dto->type) {
+                WorkLogType::WORK, WorkLogType::RECOVERY => $dto->workedMinutes ?? $log->getWorkedMinutes(),
+                default => 0,
+            };
+            $log->setWorkedMinutes($workedMinutes);
+        } elseif (null !== $dto->workedMinutes) {
+            $log->setWorkedMinutes($dto->workedMinutes);
         }
 
         if ($dto->status) {
@@ -98,4 +115,42 @@ class WorkLogManager
         $this->em->flush();
     }
 
+    public function calculateWorkData(
+        ?\DateTime $start,
+        ?\DateTime $end,
+    ): array {
+        if (!$start || !$end) {
+            return [0, null];
+        }
+
+        $interval = $start->diff($end);
+
+        $minutes = max(
+            0,
+            ($interval->h * 60 + $interval->i)
+            - TimeConfig::BREAK_MINUTES
+        );
+
+        $status = $minutes >= TimeConfig::WORK_DAY_MINUTES
+            ? StatusEnum::COMPLETED
+            : StatusEnum::WARNING;
+
+        return [$minutes, $status];
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public function createDateTime(
+        \DateTime $date,
+        ?string $time,
+    ): ?\DateTime {
+        if (!$time) {
+            return null;
+        }
+
+        return new \DateTime(
+            $date->format('Y-m-d').' '.$time
+        );
+    }
 }

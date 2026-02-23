@@ -26,22 +26,6 @@ class TimeReportService
         ];
     }
 
-    //    private function mapLogsToCalendar(array $logs): array
-    //    {
-    //        return array_map(fn (WorkLog $w) => [
-    //            'title' => "Worked {$w->getWorkedMinutes()} min",
-    //            'date' => $w->getDate()?->format('Y-m-d'),
-    //            'start' => $this->buildDateTime($w->getDate(), $w->getStartTime()),
-    //            'end' => $this->buildDateTime($w->getDate(), $w->getEndTime()),
-    //            'startTime' => $w->getStartTime()?->format('H:i'),
-    //            'endTime' => $w->getEndTime()?->format('H:i'),
-    //            'workedMinutes' => $w->getWorkedMinutes(),
-    //            'status' => $w->getStatus(),
-    //            'type' => $w->getType()->value,
-    //            'color' => $this->getColorByType($w->getType()),
-    //        ], $logs);
-    //    }
-
     private function mapLogs(array $logs): array
     {
         return array_map(function (WorkLog $w) {

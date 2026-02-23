@@ -3,7 +3,6 @@
 namespace App\Controller;
 
 use App\DTO\LogDTO;
-use App\Enum\StatusEnum;
 use App\Enum\WorkLogType;
 use App\Repository\WorkLogRepository;
 use App\Service\LogFileManager;
@@ -62,21 +61,32 @@ class MainApiController extends AbstractController
     {
         $payload = json_decode($request->getContent(), true);
 
-        $dto = new LogDTO(
-            date: new \DateTime($payload['date']),
-            startTime: $payload['startTime'] ?? null,
-            endTime: $payload['endTime'] ?? null,
-            workedMinutes: $payload['workedMinutes'] ?? null,
-            status: StatusEnum::from($payload['status']) ?? null,
-            type: WorkLogType::from($payload['type']) ?? null
-        );
+        try {
+            $date = new \DateTime($payload['date']);
 
-        $workLog = $this->workLogManager->createEvent($dto);
+            $start = $this->workLogManager->createDateTime($date, $payload['startTime'] ?? null);
+            $end = $this->workLogManager->createDateTime($date, $payload['endTime'] ?? null);
 
-        return $this->json(
-            $this->timeReportService->singleLog($workLog),
-            201
-        );
+            [$minutes, $status] = $this->workLogManager->calculateWorkData($start, $end);
+
+            $dto = new LogDTO(
+                date: $date,
+                startTime: $start,
+                endTime: $end,
+                workedMinutes: $minutes,
+                status: $status,
+                type: WorkLogType::from($payload['type']) ?? null
+            );
+
+            $workLog = $this->workLogManager->createEvent($dto);
+
+            return $this->json(
+                $this->timeReportService->singleLog($workLog),
+                201
+            );
+        } catch (\Throwable $e) {
+            return $this->json(['error' => $e], 500);
+        }
     }
 
     #[Route('/api/worklogs/{id}', methods: ['PUT'])]
@@ -86,20 +96,32 @@ class MainApiController extends AbstractController
     ): JsonResponse {
         $payload = json_decode($request->getContent(), true);
 
-        $dto = new LogDTO(
-            new \DateTime($payload['date']) ?? null,
-            $payload['startTime'] ?? null,
-            $payload['endTime'] ?? null,
-            $payload['workedMinutes'] ?? null,
-            StatusEnum::from($payload['status']) ?? null,
-            WorkLogType::from($payload['type']) ?? null
-        );
+        try {
+            $date = new \DateTime($payload['date']);
 
-        $log = $this->workLogManager->updateEvent($id, $dto);
+            $start = $this->workLogManager->createDateTime($date, $payload['startTime'] ?? null);
+            $end = $this->workLogManager->createDateTime($date, $payload['endTime'] ?? null);
 
-        return $this->json(
-            $this->timeReportService->singleLog($log)
-        );
+            [$minutes, $status] = $this->workLogManager->calculateWorkData($start, $end);
+
+            $dto = new LogDTO(
+                date: $date,
+                startTime: $start,
+                endTime: $end,
+                workedMinutes: $minutes,
+                status: $status,
+                type: WorkLogType::from($payload['type']) ?? null
+            );
+
+            $log = $this->workLogManager->updateEvent($id, $dto);
+
+            return $this->json(
+                $this->timeReportService->singleLog($log),
+                200
+            );
+        } catch (\Throwable $exception) {
+            return $this->json(['error' => $exception], 500);
+        }
     }
 
     #[Route('/api/worklogs/{id}', methods: ['DELETE'])]
@@ -109,5 +131,4 @@ class MainApiController extends AbstractController
 
         return $this->json(['success' => true]);
     }
-
 }
