@@ -78,18 +78,18 @@ class LogFileManager
                 return $b->getStartTime() <=> $a->getStartTime();
             });
 
-            $totalMinutes = $this->calculateTotalMinutes($filledEntries);
-            $soldeMinutes = $this->calculateSoldeMinutes(
-                monthYear: $item->getMonthYear(),
-                totalMinutes: $totalMinutes,
-                entriesCount: count($filledEntries)
+            $diffJour = count($entries) - count($filledEntries);
+
+            $soldes = $this->calculateSolde(
+                solde: $item->getSolde(),
+                diffJour: $diffJour,
             );
 
             $paginatedItems[$index] = MonthlyLogData::fromArray([
                 'monthYear' => $item->getMonthYear(),
                 'monthYearDetail' => $item->getMonthYearDetail(),
-                'total' => $this->formatDuration($totalMinutes),
-                'solde' => $this->formatDuration($soldeMinutes),
+                'total' => $item->getTotal(),
+                'solde' => $soldes,
                 'entries' => $filledEntries,
             ]);
         }
@@ -102,38 +102,27 @@ class LogFileManager
         );
     }
 
-    private function calculateTotalMinutes(array $entries): int
+    private function calculateSolde(string $solde, int $diffJour): string
     {
-        $total = 0;
+        // extraire jours, heures et minutes
+        preg_match('/(?:(\d+)j)?\s*(?:(\d+)h)?\s*(?:(\d+)mn)?/', $solde, $matches);
+        $jours = isset($matches[1]) ? (int) $matches[1] : 0;
+        $heures = isset($matches[2]) ? (int) $matches[2] : 0;
+        $minutes = isset($matches[3]) ? (int) $matches[3] : 0;
 
-        /** @var Log $log */
-        foreach ($entries as $log) {
-            // Si on a un startTime et un endTime → calcul direct
-            if ($log->getStartTime() instanceof \DateTime && $log->getEndTime() instanceof \DateTime) {
-                $interval = $log->getStartTime()->diff($log->getEndTime());
-                $minutes = ($interval->h * 60) + $interval->i;
+        // convertir tout en minutes
+        $totalMinutes = $jours * 24 * 60 + $heures * 60 + $minutes;
 
-                $total += $minutes;
-                continue;
-            }
+        // ajouter la différence de jours (en minutes)
+        $totalMinutes += $diffJour * self::WORK_DAY_MINUTES;
 
-            // Sinon fallback : parser between "07h 56"
-            if ($log->getBetween() && preg_match('/(\d+)h\s*(\d+)/', $log->getBetween(), $match)) {
-                $total += ((int) $match[1] * 60) + (int) $match[2];
-            }
-        }
+        // reconvertir en j/h/mn
+        $jours = floor($totalMinutes / (24 * 60));
+        $restMinutes = $totalMinutes % (24 * 60);
+        $heures = floor($restMinutes / 60);
+        $minutes = $restMinutes % 60;
 
-        return $total;
-    }
-
-    private function calculateSoldeMinutes(string $monthYear, int $totalMinutes, int $entriesCount): int
-    {
-        $currentMonth = (new \DateTime())->format('Y-m');
-
-        // minutes attendues pour ce nombre de jours
-        $expected = $this->convertNbrDaysToMinutes($entriesCount);
-
-        return $totalMinutes - $expected;
+        return "{$jours}j {$heures}h {$minutes}mn";
     }
 
     private function readLogFile(string $logFile): array
